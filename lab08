@@ -1,0 +1,55 @@
+import pandas as pd
+from prophet import Prophet
+
+# Load the dataset
+df = pd.read_csv('powerconsumption.csv', sep=',', parse_dates=['Datetime'])
+
+# Columns representing power consumption in different zones
+power_columns = ['PowerConsumption_Zone1', 'PowerConsumption_Zone2', 'PowerConsumption_Zone3']
+
+# Forecasting function using Prophet
+def prophet_forecast(data, column, future_steps):
+    # Prepare data for Prophet: Rename columns to 'ds' and 'y' as required by Prophet
+    prophet_data = data[['Datetime', column]].rename(columns={'Datetime': 'ds', column: 'y'})
+    
+    # Create and fit the model
+    model = Prophet(uncertainty_samples=0)  # Disable uncertainty intervals if not needed
+    model.fit(prophet_data)
+    
+    # Create a dataframe for future predictions (10-minute intervals)
+    future = model.make_future_dataframe(periods=future_steps, freq='10min')
+    
+    # Make predictions
+    forecast = model.predict(future)
+    
+    return forecast[['ds', 'yhat']]
+
+# Forecast for the next 24 hours with 10-minute intervals (24 * 6 = 144 steps)
+future_steps = 24 * 6
+
+# Dictionary to store the forecasts for each zone
+forecasts = {}
+for column in power_columns:
+    # Check for missing data and handle it if necessary
+    if df[column].isna().sum() > 0:
+        print(f"Warning: {column} contains missing values, handling them.")
+        df[column].fillna(method='ffill', inplace=True)  # Forward fill as an example
+    
+    # Generate the forecast for each zone
+    forecasts[column] = prophet_forecast(df, column, future_steps)
+
+# Create a dataframe to hold the forecast results for all zones
+future_df = pd.DataFrame()
+future_df['Datetime'] = forecasts[power_columns[0]]['ds']  # Use the datetime from one of the forecasts
+for column in power_columns:
+    future_df[column] = forecasts[column]['yhat']
+
+# Set the 'Datetime' column as the index
+future_df.set_index('Datetime', inplace=True)
+
+# Extract the forecast for the next 24 hours
+future_df = future_df.iloc[-future_steps:]
+
+# Display the forecast
+print("Forecast for the next 24 hours")
+print(future_df)

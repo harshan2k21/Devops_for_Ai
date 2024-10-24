@@ -1,0 +1,62 @@
+import pandas as pd
+import numpy as np
+from sklearn.metrics.pairwise import cosine_similarity
+from sklearn.preprocessing import OneHotEncoder, MinMaxScaler
+import sklearn
+
+# Load the dataset
+file_path = 'synthetic_products.csv'
+product_data = pd.read_csv(file_path)
+
+# Select relevant features for recommendation: 'category', 'brand', 'price', 'rating'
+features = product_data[['category', 'brand', 'price', 'rating']]
+
+# One-hot encode the categorical columns: 'category' and 'brand'
+if sklearn.__version__ >= '0.22':
+    encoder = OneHotEncoder(sparse_output=False, handle_unknown='ignore')
+else:
+    encoder = OneHotEncoder(sparse=False, handle_unknown='ignore')
+encoded_features = encoder.fit_transform(features[['category', 'brand']])
+
+# Normalize the 'price' and 'rating' columns for better comparison
+scaler = MinMaxScaler()
+price_rating_normalized = scaler.fit_transform(features[['price', 'rating']])
+
+# Combine the encoded categorical features with the normalized numerical features
+combined_features = np.hstack((encoded_features, price_rating_normalized))
+
+# Calculate the cosine similarity between all products
+similarity_matrix = cosine_similarity(combined_features)
+
+# Function to get recommendations
+def get_recommendations(product_id, num_recommendations=5):
+    # Get the index of the product by matching product_id
+    idx = product_data.index[product_data['product_id'] == product_id].tolist()
+    
+    if not idx:
+        print(f"Product ID {product_id} not found.")
+        return None
+    
+    idx = idx[0]
+    
+    # Get similarity scores for this product
+    similarity_scores = list(enumerate(similarity_matrix[idx]))
+    
+    # Sort products by similarity scores (excluding the product itself)
+    similarity_scores = sorted(similarity_scores, key=lambda x: x[1], reverse=True)[1:num_recommendations+1]
+    
+    # Get the recommended product indices
+    recommended_indices = [i[0] for i in similarity_scores]
+    
+    # Return the recommended products
+    return product_data.iloc[recommended_indices][['product_id', 'name', 'category', 'brand', 'price', 'rating']]
+
+# Test the recommendation system with a sample product
+sample_product_id = 'P1924'
+recommendations = get_recommendations(sample_product_id)
+
+if recommendations is not None:
+    print(f"Recommendations for product {sample_product_id}:")
+    print(recommendations)
+else:
+    print("No recommendations available.")
